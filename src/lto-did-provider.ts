@@ -53,7 +53,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
 
     this.lto = options.lto ?? new LTO(options.networkId ?? 'T');
     if (options.lto && options.networkId && options.lto.networkId !== options.networkId) {
-      throw new Error(`Network id mismatch: ${options.lto.networkId} !== ${options.networkId}`);
+      throw new Error(`Network id mismatch: expected '${options.networkId}', got '${options.lto.networkId}'`);
     }
 
     if (options.sponsor) {
@@ -153,12 +153,11 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     const account = this.account(options);
     const builder = new IdentityBuilder(account);
 
-    const relationships = this.getRelationships({
-      ...Object.fromEntries(ALL_RELATIONSHIPS.map((str) => [str, true])), // All relationships enabled by default
-      ...options,
-    });
-    if (relationships.length !== ALL_RELATIONSHIPS.length) {
-      builder.addVerificationMethod(account, relationships);
+    if (ALL_RELATIONSHIPS.some((key) => key in options)) {
+      const relationships = this.getRelationships(options);
+      if (relationships.length !== ALL_RELATIONSHIPS.length) {
+        builder.addVerificationMethod(account, relationships);
+      }
     }
 
     for (const method of options.verificationMethods ?? []) {
@@ -219,37 +218,47 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     args: {
       identifier: IIdentifier;
       key: IKey;
-      options?: RelationshipOptions & { expires?: Date };
+      options?: RelationshipOptions & { expires?: Date; builder?: IdentityBuilder };
     },
     context: IAgentContext<IKeyManager>,
   ): Promise<Transaction[]> {
     const managementKey = this.getManagementKey(args.identifier);
     const account = this.accountFromKey(managementKey);
 
+    if (args.options?.builder && args.options?.builder?.account.address !== account.address) {
+      throw new Error('Builder account does not match management key');
+    }
+
     const subAccount = this.accountFromKey(args.key);
     const relationships = this.getRelationships(args.options ?? {});
 
-    const builder = new IdentityBuilder(account);
+    const builder = args.options?.builder ?? new IdentityBuilder(account);
     builder.addVerificationMethod(subAccount, relationships, args.options?.expires);
 
-    return this.broadcast(...builder.transactions);
+    if (args.options?.builder) return []; // Don't broadcast if builder is provided
+    return await this.broadcast(...builder.transactions);
   }
 
   async removeKey(
-    args: { identifier: IIdentifier; kid: string; options?: any },
+    args: { identifier: IIdentifier; kid: string; options?: { builder?: IdentityBuilder } },
     context: IAgentContext<IKeyManager>,
   ): Promise<Transaction[]> {
     const managementKey = this.getManagementKey(args.identifier);
     const account = this.accountFromKey(managementKey);
 
-    const builder = new IdentityBuilder(account);
+    if (args.options?.builder && args.options?.builder?.account.address !== account.address) {
+      throw new Error('Builder account does not match management key');
+    }
+
+    const builder = args.options?.builder ?? new IdentityBuilder(account);
     builder.removeVerificationMethod(args.kid);
 
-    return this.broadcast(...builder.transactions);
+    if (args.options?.builder) return []; // Don't broadcast if builder is provided
+    return await this.broadcast(...builder.transactions);
   }
 
   async addService(
-    args: { identifier: IIdentifier; service: IService; options?: any },
+    args: { identifier: IIdentifier; service: IService; options?: { builder?: IdentityBuilder } },
     context: IAgentContext<IKeyManager>,
   ): Promise<Transaction[]> {
     const managementKey = this.getManagementKey(args.identifier);
@@ -258,11 +267,12 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     const builder = new IdentityBuilder(account);
     builder.addService(args.service);
 
-    return this.broadcast(...builder.transactions);
+    if (args.options?.builder) return []; // Don't broadcast if builder is provided
+    return await this.broadcast(...builder.transactions);
   }
 
   async removeService(
-    args: { identifier: IIdentifier; id: string; options?: any },
+    args: { identifier: IIdentifier; id: string; options?: { builder?: IdentityBuilder } },
     context: IAgentContext<IKeyManager>,
   ): Promise<Transaction[]> {
     const managementKey = this.getManagementKey(args.identifier);
@@ -271,6 +281,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     const builder = new IdentityBuilder(account);
     builder.removeService(args.id);
 
-    return this.broadcast(...builder.transactions);
+    if (args.options?.builder) return []; // Don't broadcast if builder is provided
+    return await this.broadcast(...builder.transactions);
   }
 }

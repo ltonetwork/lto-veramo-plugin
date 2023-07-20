@@ -4,3 +4,4 @@ yarn.lock
 dist/
 node_modules/
 lib/
+.nyc_output/
