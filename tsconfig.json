@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "alwaysStrict": true,
+    "baseUrl": "",
+    "lib": ["ES6"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "sourceMap": true,
+    "declaration": true,
+    "target": "ES6",
+    "paths": {},
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": ["src"]
+}

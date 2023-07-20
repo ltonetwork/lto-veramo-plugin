@@ -1,0 +1,66 @@
+language: node_js
+dist: focal
+node_js: 18
+
+branches:
+  only:
+    - main
+    - /^v\d+\.\d+\.\d+$/
+
+stages:
+  - name: test
+    if: tag IS blank
+  - name: deploy
+
+before_install:
+  - git config --local user.name "LTO Network"
+  - git config --local user.email "info@ltonetwork.com"
+install:
+  - npm install
+
+jobs:
+  fast_finish: true
+  include:
+    - name: "Test"
+      stage: test
+      script:
+        - npm test
+    - name: "Publish GitHub release"
+      stage: deploy
+      if: branch = main AND type = push
+      before_script:
+        - CURRENT_VERSION=$(git describe --tags --abbrev=0)
+        - |
+          if (git log $CURRENT_VERSION..HEAD | grep -q -i "\[bump:major\]"); then
+            NEXT_VERSION=$(awk -F. -v OFS=. '{$1++;$2=0;$3=0;print}' <<< "$CURRENT_VERSION")
+          elif (git log $CURRENT_VERSION..HEAD | grep -q -i "\[bump:minor\]"); then
+            NEXT_VERSION=$(awk -F. -v OFS=. '{$2++;$3=0;print}' <<< "$CURRENT_VERSION")
+          else
+            NEXT_VERSION=$(awk -F. -v OFS=. '{$3++;print}' <<< "$CURRENT_VERSION")
+          fi
+      script:
+        - git tag "$NEXT_VERSION"
+      before_deploy:
+        - npm run build
+      deploy:
+        provider: releases
+        api_key: ''
+        cleanup: false
+        skip_cleanup: true
+        on:
+          all_branches: true
+    - name: "Publish to NPM"
+      stage: deploy
+      if: tag IS present
+      before_install:
+        - npm version $TRAVIS_TAG --no-git-tag-version
+      script:
+        - npx tsc
+      deploy:
+        provider: npm
+        email: arnold@jasny.net
+        api_key: ''
+        on:
+          tags: true
+        cleanup: false
+        skip_cleanup: true

@@ -1,0 +1,47 @@
+{
+  "name": "@ltonetwork/veramo-plugin",
+  "version": "0.0.0",
+  "description": "Veramo plugins to manage DIDs and verifiable credentials on LTO Network",
+  "author": "Arnold Daniels <arnold@ltonetwork.com>",
+  "repository": "git@github.com:ltonetwork/lto-veramo-plugin.git",
+  "bugs": "https://github.com/ltonetwork/lto-veramo-plugin/issues",
+  "license": "MIT",
+  "scripts": {
+    "clean": "rm -rf ./lib",
+    "build": "tsc",
+    "test": "mocha --require ts-node/register 'test/**/*.spec.ts'",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint-fix": "eslint src --ext .ts,.tsx --fix"
+  },
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "files": [
+    "lib",
+    "src"
+  ],
+  "devDependencies": {
+    "@types/chai": "^4.3.5",
+    "@types/jsdom": "^20.0.1",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.3.3",
+    "@types/sinon": "^10.0.15",
+    "@typescript-eslint/eslint-plugin": "^5.60.1",
+    "@typescript-eslint/parser": "^5.61.0",
+    "chai": "^4.3.7",
+    "eslint": "^8.35.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "mocha": "^10.2.0",
+    "prettier": "^2.8.8",
+    "sinon": "^15.2.0",
+    "ts-loader": "^9.4.2",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.9.5"
+  },
+  "dependencies": {
+    "@ltonetwork/lto": "^0.15.9",
+    "@veramo/core": "4.2.0",
+    "@veramo/did-manager": "4.2.0",
+    "@veramo/kms-local": "4.2.0"
+  }
+}
