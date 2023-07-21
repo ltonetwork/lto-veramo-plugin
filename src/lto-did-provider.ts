@@ -42,9 +42,9 @@ interface VerificationMethod extends AccountOptions, RelationshipOptions {
 }
 
 export class LtoDIDProvider extends AbstractIdentifierProvider {
-  private readonly defaultKms: string;
-  private readonly lto: LTO;
-  private readonly sponsor?: Account;
+  readonly defaultKms: string;
+  readonly lto: LTO;
+  readonly sponsor?: Account;
 
   constructor(options: LtoOptions) {
     super();
@@ -202,7 +202,8 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     const managementKey = this.getManagementKey(args);
     const account = this.accountFromKey(managementKey);
 
-    await new IdentityBuilder(account).deactivate().broadcastTo(this.lto.node);
+    const tx = new IdentityBuilder(account).deactivate();
+    await this.broadcast(tx);
 
     return true;
   }
@@ -212,6 +213,14 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     context: IAgentContext<IKeyManager>,
   ): Promise<IIdentifier> {
     throw new Error('LtoDIDProvider updateIdentifier not supported');
+  }
+
+  private builder(account: Account, options?: { builder?: IdentityBuilder }) {
+    if (options?.builder && options?.builder?.account.address !== account.address) {
+      throw new Error('Builder account does not match identifier management key');
+    }
+
+    return options?.builder ?? new IdentityBuilder(account);
   }
 
   async addKey(
@@ -225,14 +234,10 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     const managementKey = this.getManagementKey(args.identifier);
     const account = this.accountFromKey(managementKey);
 
-    if (args.options?.builder && args.options?.builder?.account.address !== account.address) {
-      throw new Error('Builder account does not match management key');
-    }
-
     const subAccount = this.accountFromKey(args.key);
     const relationships = this.getRelationships(args.options ?? {});
 
-    const builder = args.options?.builder ?? new IdentityBuilder(account);
+    const builder = this.builder(account, args.options);
     builder.addVerificationMethod(subAccount, relationships, args.options?.expires);
 
     if (args.options?.builder) return []; // Don't broadcast if builder is provided
@@ -246,11 +251,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     const managementKey = this.getManagementKey(args.identifier);
     const account = this.accountFromKey(managementKey);
 
-    if (args.options?.builder && args.options?.builder?.account.address !== account.address) {
-      throw new Error('Builder account does not match management key');
-    }
-
-    const builder = args.options?.builder ?? new IdentityBuilder(account);
+    const builder = this.builder(account, args.options);
     builder.removeVerificationMethod(args.kid);
 
     if (args.options?.builder) return []; // Don't broadcast if builder is provided
@@ -264,7 +265,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     const managementKey = this.getManagementKey(args.identifier);
     const account = this.accountFromKey(managementKey);
 
-    const builder = new IdentityBuilder(account);
+    const builder = this.builder(account, args.options);
     builder.addService(args.service);
 
     if (args.options?.builder) return []; // Don't broadcast if builder is provided
@@ -278,7 +279,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     const managementKey = this.getManagementKey(args.identifier);
     const account = this.accountFromKey(managementKey);
 
-    const builder = new IdentityBuilder(account);
+    const builder = this.builder(account, args.options);
     builder.removeService(args.id);
 
     if (args.options?.builder) return []; // Don't broadcast if builder is provided

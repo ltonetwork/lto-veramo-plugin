@@ -6,7 +6,8 @@ import LTO, {
   Account,
   Anchor,
   Association,
-  Binary, Data,
+  Binary,
+  Data, IdentityBuilder,
   PublicNode,
   Register,
   RevokeAssociation,
@@ -352,6 +353,172 @@ describe('LtoDIDProvider', () => {
       expect(associationTx.sender).to.eq(account.address);
       expect(associationTx.data).to.have.length(1);
       expect(associationTx.data).to.deep.includes({ key: 'did:service:test', type: 'boolean', value: false });
+    });
+  });
+
+  describe('sponsor transactions', () => {
+    let sponsor: Account;
+
+    beforeEach(() => {
+      ltoDIDProvider = new LtoDIDProvider({
+        defaultKms: 'kms',
+        lto: lto,
+        sponsor: { seed: 'sponsor' },
+      });
+
+      sponsor = lto.account({ seed: 'sponsor' });
+    });
+
+    it('should have a sponsor', () => {
+      expect(ltoDIDProvider.sponsor?.address).to.eq(sponsor.address);
+    });
+
+    it('should sponsor tx for identifier creation', async () => {
+      await ltoDIDProvider.createIdentifier({}, context);
+
+      const txs = node.broadcast.args.map((args) => args[0]);
+      for (const tx of txs) {
+        expect(tx.sponsor).to.eq(sponsor.address);
+      }
+    });
+
+    it('should sponsor tx for identifier creation with verification methods and services', async () => {
+      const verificationMethods = [{ seed: 'test', nonce: 1 }];
+      const services = [{ id: '#test', type: 'test', serviceEndpoint: 'https://example.com' }];
+
+      await ltoDIDProvider.createIdentifier({ options: { verificationMethods, services } }, context);
+
+      const txs = node.broadcast.args.map((args) => args[0]);
+      for (const tx of txs) {
+        expect(tx.sponsor).to.eq(sponsor.address);
+      }
+    });
+
+    it('should sponsor tx for identifier deletion', async () => {
+      await ltoDIDProvider.deleteIdentifier(identifier, context);
+
+      const txs = node.broadcast.args.map((args) => args[0]);
+      for (const tx of txs) {
+        expect(tx.sponsor).to.eq(sponsor.address);
+      }
+    });
+
+    it('should sponsor tx when adding a key', async () => {
+      const subAccount = lto.account({ seed: 'test', nonce: 1 });
+      const key = {
+        kid: `${subAccount.did}#sign`,
+        kms: 'kms',
+        type: 'Ed25519' as TKeyType,
+        publicKeyHex: subAccount.signKey.publicKey.hex,
+        privateKeyHex: subAccount.signKey.privateKey.hex,
+      };
+
+      const txs = await ltoDIDProvider.addKey({ identifier, key }, context);
+
+      for (const tx of txs) {
+        expect(tx.sponsor).to.eq(sponsor.address);
+      }
+    });
+
+    it('should sponsor tx when removing a key', async () => {
+      const subAccount = lto.account({ seed: 'test', nonce: 1 });
+
+      const txs = await ltoDIDProvider.removeKey({ identifier, kid: `${subAccount.did}#sign` }, context);
+
+      for (const tx of txs) {
+        expect(tx.sponsor).to.eq(sponsor.address);
+      }
+    });
+
+    it('should sponsor tx when adding a service', async () => {
+      const service = { id: '#test', type: 'test', serviceEndpoint: 'https://example.com' };
+
+      const txs = await ltoDIDProvider.addService({ identifier, service }, context);
+
+      for (const tx of txs) {
+        expect(tx.sponsor).to.eq(sponsor.address);
+      }
+    });
+
+    it('should sponsor tx when removing a service', async () => {
+      const txs = await ltoDIDProvider.removeService({ identifier, id: '#test' }, context);
+
+      for (const tx of txs) {
+        expect(tx.sponsor).to.eq(sponsor.address);
+      }
+    });
+  });
+
+  describe('using builder', () => {
+    let builder: IdentityBuilder;
+
+    beforeEach(() => {
+      builder = new IdentityBuilder(account);
+    });
+
+    it('should not broadcast when adding a key', async () => {
+      const subAccount = lto.account({ seed: 'test', nonce: 1 });
+      const key = {
+        kid: `${subAccount.did}#sign`,
+        kms: 'kms',
+        type: 'Ed25519' as TKeyType,
+        publicKeyHex: subAccount.signKey.publicKey.hex,
+        privateKeyHex: subAccount.signKey.privateKey.hex,
+      };
+
+      const txs = await ltoDIDProvider.addKey({ identifier, key, options: { builder } }, context);
+
+      expect(txs).to.have.length(0);
+      expect(node.broadcast.called).to.be.false;
+
+      expect(builder.newMethods).to.have.length(1);
+    });
+
+    it('should not broadcast when removing a key', async () => {
+      const subAccount = lto.account({ seed: 'test', nonce: 1 });
+
+      const txs = await ltoDIDProvider.removeKey(
+        { identifier, kid: `${subAccount.did}#sign`, options: { builder } },
+        context,
+      );
+
+      expect(txs).to.have.length(0);
+      expect(node.broadcast.called).to.be.false;
+
+      expect(builder.removedMethods).to.have.length(1);
+    });
+
+    it('should not broadcast when adding a service', async () => {
+      const service = { id: '#test', type: 'test', serviceEndpoint: 'https://example.com' };
+
+      const txs = await ltoDIDProvider.addService({ identifier, service, options: { builder } }, context);
+
+      expect(txs).to.have.length(0);
+      expect(node.broadcast.called).to.be.false;
+
+      expect(builder.newServices).to.have.length(1);
+    });
+
+    it('should not broadcast when removing a service', async () => {
+      const txs = await ltoDIDProvider.removeService({ identifier, id: '#test', options: { builder } }, context);
+
+      expect(txs).to.have.length(0);
+      expect(node.broadcast.called).to.be.false;
+
+      expect(builder.removedServices).to.have.length(1);
+    });
+
+    it('should throw an error when the builder is not for the same account', async () => {
+      const otherAccount = lto.account({ seed: 'other' });
+      builder = new IdentityBuilder(otherAccount);
+
+      try {
+        await ltoDIDProvider.removeService({ identifier, id: '#test', options: { builder } }, context);
+        expect.fail('Should throw an error');
+      } catch (e) {
+        expect(e).to.be.instanceOf(Error);
+        expect(e.message).to.eq('Builder account does not match identifier management key');
+      }
     });
   });
 });
