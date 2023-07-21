@@ -44,7 +44,8 @@ jobs:
         - npm run build
       deploy:
         provider: releases
-        api_key: ''
+        api_key:
+          secure: "gOLEpVldxcitQsNv74mA4D9p2bV5eaOa3eE1AO97Z0oYxsNGyxyVZbDSCBgQAkHLhaj7/nN7G0BE+pPgaOEUI6fE1LQDRENplqjAu64IlaC7V6R3bk0qZU53TTGWWPqCYBslTfY4kRewJTP0FMXMBMbBODfYu5k+jcRIO7WyDKO2A5aJmf0GfyI1PtT75QmlaMByiDwYsvOp7m5UVYPKWN+Exe3NdALDmprnTkIG4Q6/E2D+KTAkli+qq/i62WpyhBo7Ms/O/Xc3OW0fEKeEoJfV7V3oC8sowFLppBCTYV0M2DWY2t0qzJ++6cQt0MAb8IPSeGC8gB74NqnZB9Tn70I476+THlbw6TNdTyH5jJAanw2MIISqm1UyNjezKTPOZH1kSE1ldmUus4Yc9lbXuICrXbmF7b23qPMFKwVnykiYgv/LnbgzSkiOOpKD4KoOn+d7j3Waxmn7bWUbKRsNl9GbxppANZutUuy36lLiGXOy1SqLmkRot33UMs9u9yiv2os//UBAhUsLGOAkgsgf0zRqMJwRCr1mv+78GWVf6dt2fAVYES8vaKi3ObnSE99TU3sLwFM1Rv/1zhxP8Z2su/4Zj0kvUZ70cCKy7zLKwKt/IAnkDmDJN6GKZQpE1ZzCEUi6ez2674LJwVZk8Jw717wKFpe9BwR9cU/F5UnW6g8="
         cleanup: false
         skip_cleanup: true
         on:
@@ -59,7 +60,8 @@ jobs:
       deploy:
         provider: npm
         email: arnold@jasny.net
-        api_key: ''
+        api_key:
+          secure: "yo4UVWDMKK2uHc6GNWsbnnQYASZza/gBCs1qzlNEq1GA4hoHW5slPplfUZjxvNmu+7SLpnwKzldm+dhnI8Z6Ve6IXGjME4C4YgNEiQbaCifvy3nrxPdUtsGWA03/XcnaBiz2MK8LHDHFszQNHqXR3fmX3kF7oQnKW1lhPj7X8cZKnP30YqY4vBx9ym6+yxqMJlPqZmCm+CT+HvJGh4XIZYy5/BIpyuhwgNi/i8RXjjRh2vo/xGnd/UTa52l3rBJNs+TAj55/Mt6UOnKZ1FmISR80uJO8IvG4InsdxTzuQY9X7pJ4RtuPgekQE0y4qcmDtWqKOE04mrgT6FkDYpaNT599rh1KrBH5wZ4wxa/3TSq0Lbn+xEvW4hMIqYK+mOsNXgQ1z4rYhhjOXdzNJuj03YxrjBVv27hqd/mfOrMvKxzs8PdSusLRo6oH9gkEqdLT79sOqxYfe50G7sdfeB2yqs0pHzI3YBPwtNQ1dPeuL+qu6kjIjKV+Jct6MCt249kXZE7Ufs/5FuJyZdKH/08u6QCP+oRCcR2qaZSux/DfBLyKw6UFlMiw4r0JsPtD3X9zRH//XlasH/WRyqB9S0xFQBJTz6wb9booFCAUtZ8L6gKLUGYtz/0Vssn6aMmRBM7+Kg6b7FHgNRt/tYZx+qEu2PVN89ZRhVysWqcKGHR5ydA="
         on:
           tags: true
         cleanup: false

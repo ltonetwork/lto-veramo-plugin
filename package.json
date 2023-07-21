@@ -1,6 +1,6 @@
 {
   "name": "@ltonetwork/veramo-plugin",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Veramo plugins to manage DIDs and verifiable credentials on LTO Network",
   "author": "Arnold Daniels <arnold@ltonetwork.com>",
   "repository": "git@github.com:ltonetwork/lto-veramo-plugin.git",
