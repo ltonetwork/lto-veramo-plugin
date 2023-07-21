@@ -8,10 +8,14 @@ interface LtoOptionsWithLTO {
   defaultKms: string;
   sponsor?: ISigner | IAccountIn;
   lto: LTO;
+  networkId?: never;
+  nodeAddress?: never;
+  nodeApiKey?: never;
 }
 interface LtoOptionsWithSettings {
   defaultKms: string;
   sponsor?: ISigner | IAccountIn;
+  lto?: never;
   networkId?: string;
   nodeAddress?: string;
   nodeApiKey?: string;
