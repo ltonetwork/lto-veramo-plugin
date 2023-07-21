@@ -1,7 +1,8 @@
 import { AbstractIdentifierProvider } from '@veramo/did-manager';
-import { DIDDocument, IAgentContext, IIdentifier, IKey, IKeyManager, IService, TKeyType } from '@veramo/core';
+import { DIDDocument, IAgentContext, IIdentifier, IKey, IKeyManager, IService } from '@veramo/core';
 import LTO, { Binary, Account, IdentityBuilder, Transaction } from '@ltonetwork/lto';
 import { IAccountIn, ISigner, TDIDRelationship } from '@ltonetwork/lto/interfaces';
+import { accountAsKey, ofIdentifier, ofKey } from './convert';
 
 interface LtoOptions {
   defaultKms: string;
@@ -77,23 +78,12 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     return this.lto.account(options);
   }
 
-  private accountFromKey({ meta, type, privateKeyHex, publicKeyHex }: IKey): Account {
-    return this.lto.account({
-      ...meta,
-      keyType: type.toLowerCase(),
-      privateKey: privateKeyHex ? Binary.fromHex(privateKeyHex) : undefined,
-      publicKey: Binary.fromHex(publicKeyHex),
-    });
-  }
+  private builder(account: Account, options?: { builder?: IdentityBuilder }) {
+    if (options?.builder && options?.builder?.account.address !== account.address) {
+      throw new Error('Builder account does not match identifier management key');
+    }
 
-  private getManagementKey(identifier: IIdentifier): IKey & { privateKeyHex: string } {
-    const controllerKeyId = identifier.controllerKeyId ?? `${identifier.did}#sign`;
-    const managementKey = identifier.keys.find((key) => key.kid === controllerKeyId);
-
-    if (!managementKey) throw new Error(`No management key found for ${identifier.did}`);
-    if (!managementKey.privateKeyHex) throw new Error(`Private key not known for ${identifier.did}`);
-
-    return managementKey as IKey & { privateKeyHex: string };
+    return options?.builder ?? new IdentityBuilder(account);
   }
 
   private getRelationships(options: RelationshipOptions): TDIDRelationship[] {
@@ -109,20 +99,8 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
   ): Promise<IKey> {
     if (!account.signKey.privateKey) throw new Error('Account does not have a private key');
 
-    const keyType = (account.keyType.charAt(0).toUpperCase() + account.keyType.slice(1)) as TKeyType;
-
-    return await context.agent.keyManagerImport({
-      kid: `${account.did}#sign`,
-      kms: kms || this.defaultKms,
-      privateKeyHex: account?.signKey.privateKey!.hex,
-      publicKeyHex: account?.signKey.publicKey.hex,
-      type: keyType,
-      meta: {
-        address: account.address,
-        seed: account.seed,
-        nonce: account.nonce instanceof Binary ? `base64:${account.nonce.base64}` : account.nonce,
-      },
-    });
+    const key = accountAsKey(account, { kms, type: 'sign' }) as Required<IKey>;
+    return await context.agent.keyManagerImport(key);
   }
 
   private async createEncryptKey(
@@ -131,20 +109,9 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     account: Account,
   ): Promise<IKey> {
     if (!account.encryptKey.privateKey) throw new Error('Account does not have a private encryption key');
-    if (account.keyType !== 'ed25519') throw new Error('Not an X25519 encryption key');
 
-    return await context.agent.keyManagerImport({
-      kid: `${account.did}#encrypt`,
-      kms: kms || this.defaultKms,
-      privateKeyHex: account?.encryptKey.privateKey!.hex,
-      publicKeyHex: account?.encryptKey.publicKey.hex,
-      type: 'X25519',
-      meta: {
-        address: account.address,
-        seed: account.seed,
-        nonce: typeof account.nonce === 'number' ? account.nonce : account.nonce?.hex,
-      },
-    });
+    const key = accountAsKey(account, { kms, type: 'encrypt' }) as Required<IKey>;
+    return await context.agent.keyManagerImport(key);
   }
 
   private async registerDID(
@@ -199,8 +166,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
   }
 
   async deleteIdentifier(args: IIdentifier, context: IAgentContext<IKeyManager>): Promise<boolean> {
-    const managementKey = this.getManagementKey(args);
-    const account = this.accountFromKey(managementKey);
+    const account = this.lto.account(ofIdentifier(args));
 
     const tx = new IdentityBuilder(account).deactivate();
     await this.broadcast(tx);
@@ -215,14 +181,6 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     throw new Error('LtoDIDProvider updateIdentifier not supported');
   }
 
-  private builder(account: Account, options?: { builder?: IdentityBuilder }) {
-    if (options?.builder && options?.builder?.account.address !== account.address) {
-      throw new Error('Builder account does not match identifier management key');
-    }
-
-    return options?.builder ?? new IdentityBuilder(account);
-  }
-
   async addKey(
     args: {
       identifier: IIdentifier;
@@ -231,10 +189,9 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     },
     context: IAgentContext<IKeyManager>,
   ): Promise<Transaction[]> {
-    const managementKey = this.getManagementKey(args.identifier);
-    const account = this.accountFromKey(managementKey);
+    const account = this.lto.account(ofIdentifier(args.identifier));
 
-    const subAccount = this.accountFromKey(args.key);
+    const subAccount = this.lto.account(ofKey(args.key));
     const relationships = this.getRelationships(args.options ?? {});
 
     const builder = this.builder(account, args.options);
@@ -248,8 +205,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     args: { identifier: IIdentifier; kid: string; options?: { builder?: IdentityBuilder } },
     context: IAgentContext<IKeyManager>,
   ): Promise<Transaction[]> {
-    const managementKey = this.getManagementKey(args.identifier);
-    const account = this.accountFromKey(managementKey);
+    const account = this.lto.account(ofIdentifier(args.identifier));
 
     const builder = this.builder(account, args.options);
     builder.removeVerificationMethod(args.kid);
@@ -262,8 +218,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     args: { identifier: IIdentifier; service: IService; options?: { builder?: IdentityBuilder } },
     context: IAgentContext<IKeyManager>,
   ): Promise<Transaction[]> {
-    const managementKey = this.getManagementKey(args.identifier);
-    const account = this.accountFromKey(managementKey);
+    const account = this.lto.account(ofIdentifier(args.identifier));
 
     const builder = this.builder(account, args.options);
     builder.addService(args.service);
@@ -276,8 +231,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
     args: { identifier: IIdentifier; id: string; options?: { builder?: IdentityBuilder } },
     context: IAgentContext<IKeyManager>,
   ): Promise<Transaction[]> {
-    const managementKey = this.getManagementKey(args.identifier);
-    const account = this.accountFromKey(managementKey);
+    const account = this.lto.account(ofIdentifier(args.identifier));
 
     const builder = this.builder(account, args.options);
     builder.removeService(args.id);
