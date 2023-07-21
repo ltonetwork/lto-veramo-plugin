@@ -108,7 +108,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
   ): Promise<IKey> {
     if (!account.signKey.privateKey) throw new Error('Account does not have a private key');
 
-    const key = accountAsKey(account, { kms, type: 'sign' }) as Required<IKey>;
+    const key = accountAsKey(account, { kms: kms || this.defaultKms }) as Required<IKey>;
     return await context.agent.keyManagerImport(key);
   }
 
@@ -119,7 +119,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
   ): Promise<IKey> {
     if (!account.encryptKey.privateKey) throw new Error('Account does not have a private encryption key');
 
-    const key = accountAsKey(account, { kms, type: 'encrypt' }) as Required<IKey>;
+    const key = accountAsKey(account, { kms: kms || this.defaultKms, type: 'encrypt' }) as Required<IKey>;
     return await context.agent.keyManagerImport(key);
   }
 

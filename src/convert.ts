@@ -26,7 +26,7 @@ export function ofIdentifier(identifier: IIdentifier): IAccountIn {
   return ofKey(managementKey);
 }
 
-export function accountAsKey(account: Account, { kms, type }: { kms?: string; type?: 'sign' | 'encrypt' }): IKey {
+export function accountAsKey(account: Account, { kms, type }: { kms: string; type?: 'sign' | 'encrypt' }): IKey {
   type ??= 'sign';
   let keyType: TKeyType;
   let keyPair: IKeyPairBytes;
@@ -42,7 +42,7 @@ export function accountAsKey(account: Account, { kms, type }: { kms?: string; ty
 
   return {
     kid: `${account.did}#${type}`,
-    kms: kms || 'kms',
+    kms: kms,
     privateKeyHex: keyPair.privateKey?.hex,
     publicKeyHex: keyPair.publicKey.hex,
     type: keyType,
