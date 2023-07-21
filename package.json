@@ -1,6 +1,6 @@
 {
   "name": "@ltonetwork/veramo-plugin",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Veramo plugins to manage DIDs and verifiable credentials on LTO Network",
   "author": "Arnold Daniels <arnold@ltonetwork.com>",
   "repository": "git@github.com:ltonetwork/lto-veramo-plugin.git",
@@ -41,8 +41,7 @@
   },
   "dependencies": {
     "@ltonetwork/lto": "^0.15.13",
-    "@veramo/core": "4.2.0",
-    "@veramo/did-manager": "4.2.0",
-    "@veramo/kms-local": "4.2.0"
+    "@veramo/core": "^4.2.0",
+    "@veramo/did-manager": "^4.2.0"
   }
 }
