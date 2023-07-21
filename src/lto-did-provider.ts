@@ -1,17 +1,22 @@
 import { AbstractIdentifierProvider } from '@veramo/did-manager';
 import { DIDDocument, IAgentContext, IIdentifier, IKey, IKeyManager, IService } from '@veramo/core';
-import LTO, { Binary, Account, IdentityBuilder, Transaction } from '@ltonetwork/lto';
+import LTO, { Binary, Account, IdentityBuilder, Transaction, PublicNode } from '@ltonetwork/lto';
 import { IAccountIn, ISigner, TDIDRelationship } from '@ltonetwork/lto/interfaces';
 import { accountAsKey, ofIdentifier, ofKey } from './convert';
 
-interface LtoOptions {
+interface LtoOptionsWithLTO {
   defaultKms: string;
   sponsor?: ISigner | IAccountIn;
-  lto?: LTO;
+  lto: LTO;
+}
+interface LtoOptionsWithSettings {
+  defaultKms: string;
+  sponsor?: ISigner | IAccountIn;
   networkId?: string;
   nodeAddress?: string;
   nodeApiKey?: string;
 }
+type LtoOptions = LtoOptionsWithLTO | LtoOptionsWithSettings;
 
 interface AccountOptions extends IAccountIn {
   publicKeyHex?: string;
@@ -52,9 +57,13 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
 
     this.defaultKms = options.defaultKms;
 
-    this.lto = options.lto ?? new LTO(options.networkId ?? 'T');
-    if (options.lto && options.networkId && options.lto.networkId !== options.networkId) {
-      throw new Error(`Network id mismatch: expected '${options.networkId}', got '${options.lto.networkId}'`);
+    if ('lto' in options) {
+      this.lto = options.lto;
+    } else {
+      this.lto = new LTO(options.networkId);
+      if (options.nodeAddress || options.nodeApiKey) {
+        this.lto.node = new PublicNode(options.nodeAddress, options.nodeApiKey);
+      }
     }
 
     if (options.sponsor) {
