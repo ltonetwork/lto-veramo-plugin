@@ -77,7 +77,7 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
 
   private async broadcast(...tsx: Transaction[]): Promise<Transaction[]> {
     if (this.sponsor) {
-      tsx.forEach((tx) => tx.sponsorWith(this.sponsor));
+      tsx.forEach((tx) => tx.sender !== this.sponsor.address && tx.sponsorWith(this.sponsor));
     }
 
     return Promise.all(tsx.map((tx) => this.lto.node.broadcast(tx)));

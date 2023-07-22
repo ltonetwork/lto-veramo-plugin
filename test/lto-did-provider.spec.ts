@@ -448,6 +448,20 @@ describe('LtoDIDProvider', () => {
         expect(tx.sponsor).to.eq(sponsor.address);
       }
     });
+
+    it('should sponsor tx when the signer is the sponsor', async () => {
+      ltoDIDProvider = new LtoDIDProvider({
+        defaultKms: 'kms',
+        lto: lto,
+        sponsor: { seed: 'test' },
+      });
+
+      const txs = await ltoDIDProvider.removeService({ identifier, id: '#test' }, context);
+
+      for (const tx of txs) {
+        expect(tx.sponsor).to.be.undefined;
+      }
+    });
   });
 
   describe('using builder', () => {
