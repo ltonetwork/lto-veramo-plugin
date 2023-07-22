@@ -7,13 +7,13 @@ This library provides [Veramo](https://veramo.io/) plugins to manage DIDs and ve
 To install the library, you can use npm or yarn:
 
 ```shell
-npm install @lto-network/veramo-plugin
+npm install @ltonetwork/veramo-plugin
 ```
 
 or
 
 ```shell
-yarn add @lto-network/veramo-plugin
+yarn add @ltonetwork/veramo-plugin
 ```
 
 ## LTO DID provider
