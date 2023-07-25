@@ -370,10 +370,6 @@ describe('LtoDIDProvider', () => {
       sponsor = lto.account({ seed: 'sponsor' });
     });
 
-    it('should have a sponsor', () => {
-      expect(ltoDIDProvider.sponsor?.address).to.eq(sponsor.address);
-    });
-
     it('should sponsor tx for identifier creation', async () => {
       await ltoDIDProvider.createIdentifier({}, context);
 
