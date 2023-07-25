@@ -14,7 +14,6 @@ import {
   CredentialStatusReference,
   CredentialPayload,
 } from '@veramo/core';
-import { CredentialPlugin } from '@veramo/credential-w3c';
 import canonicalize from 'canonicalize';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
@@ -53,10 +52,9 @@ export class LtoCredentialPlugin implements IAgentPlugin {
   readonly issueStatement: boolean;
 
   constructor(
+    plugin: { methods: ICredentialPlugin; schema?: IAgentPluginSchema },
     options: LtoOptions & { addCredentialStatus?: boolean; issueStatement?: boolean },
-    plugin?: { methods: ICredentialPlugin; schema?: IAgentPluginSchema },
   ) {
-    plugin ??= new CredentialPlugin();
     const { methods, schema } = plugin;
 
     this.methods = {
