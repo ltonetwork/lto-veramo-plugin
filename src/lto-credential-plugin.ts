@@ -1,18 +1,24 @@
 import {
-  CredentialPayload,
-  CredentialStatusGenerateArgs,
-  CredentialStatusReference,
-  CredentialStatusUpdateArgs,
-  ICredentialStatusManager,
-  IDIDManager,
-  IIdentifier,
-  IAgentContext,
   IAgentPlugin,
-  IKey,
-  IKeyManager,
-  IssuerType,
-  TAgent,
+  IAgentPluginSchema,
+  ICreateVerifiableCredentialArgs,
+  ICredentialPlugin,
+  IssuerAgentContext,
   VerifiableCredential,
+  IVerifyCredentialArgs,
+  IVerifyResult,
+  VerifierAgentContext,
+  ICredentialStatusManager,
+  CredentialStatusGenerateArgs,
+  CredentialStatusUpdateArgs,
+  CredentialStatusReference,
+  CredentialPayload,
+  IAgentContext,
+  IDIDManager,
+  IKey,
+  IIdentifier,
+  IssuerType,
+  IKeyManager,
 } from '@veramo/core';
 import canonicalize from 'canonicalize';
 import { sha256 } from '@noble/hashes/sha256';
@@ -20,6 +26,7 @@ import { base58 } from '@scure/base';
 import { LtoConnection, LtoOptions } from './lto-connection';
 import { Statement } from '@ltonetwork/lto';
 import { ofKey } from './convert';
+import { TAgent } from '@veramo/core/src/types/IAgent';
 
 interface LtoCredentialStatusGenerateArgs extends CredentialStatusGenerateArgs {
   type: 'LtoStatusRegistry2023';
@@ -48,26 +55,37 @@ enum StatusStatementType {
   acknowledge = 0x15,
 }
 
-export class LtoCredentialStatusManager implements IAgentPlugin {
-  readonly methods: ICredentialStatusManager;
-  readonly schema = {
-    components: {
-      schemas: undefined,
-      methods: undefined,
-    },
-  };
+export class LtoCredentialPlugin implements IAgentPlugin {
+  readonly _createVerifiableCredential: ICredentialPlugin['createVerifiableCredential'];
+  readonly _verifyCredential: ICredentialPlugin['verifyCredential'];
+  readonly methods: ICredentialPlugin & ICredentialStatusManager;
+  readonly schema?: IAgentPluginSchema;
 
   readonly lto: LtoConnection;
+  readonly addCredentialStatus: boolean;
   readonly issueStatement: boolean;
 
-  constructor(options: LtoOptions & { issueStatement?: boolean }) {
+  constructor(
+    plugin: { methods: ICredentialPlugin; schema?: IAgentPluginSchema },
+    options: LtoOptions & { addCredentialStatus?: boolean; issueStatement?: boolean },
+  ) {
+    const { methods, schema } = plugin;
+
     this.methods = {
+      ...methods,
+      createVerifiableCredential: this.createVerifiableCredential.bind(this),
+      verifyCredential: this.verifyCredential.bind(this),
       credentialStatusGenerate: this.credentialStatusGenerate.bind(this),
       credentialStatusUpdate: this.credentialStatusUpdate.bind(this),
       credentialStatusTypes: this.credentialStatusTypes.bind(this),
     };
+    this._createVerifiableCredential = methods.createVerifiableCredential;
+    this._verifyCredential = methods.verifyCredential;
+
+    this.schema = schema;
 
     this.lto = new LtoConnection(options);
+    this.addCredentialStatus = options.addCredentialStatus ?? false;
     this.issueStatement = options.issueStatement ?? true;
   }
 
@@ -105,13 +123,52 @@ export class LtoCredentialStatusManager implements IAgentPlugin {
     return sha256(canonicalize(rest) as string);
   }
 
+  async createVerifiableCredential(
+    args: ICreateVerifiableCredentialArgs,
+    context: IssuerAgentContext,
+  ): Promise<VerifiableCredential> {
+    if (this.addCredentialStatus) {
+      args.credential.credentialStatus = await this.credentialStatusGenerate(
+        { type: 'LtoStatusRegistry2023', ...args },
+        context,
+      );
+    }
+
+    return this._createVerifiableCredential(args, context);
+  }
+
+  async verifyCredential(args: IVerifyCredentialArgs, context: VerifierAgentContext): Promise<IVerifyResult> {
+    const result = await this._verifyCredential(args, context);
+
+    const { credential } = args;
+
+    if (
+      result.verified &&
+      typeof credential !== 'string' &&
+      credential.credentialStatus?.type === 'LtoStatusRegistry2023'
+    ) {
+      const id = this.credentialStatusId(credential);
+
+      if (credential.credentialStatus.id !== base58.encode(id)) {
+        result.verified = false;
+        result.error = {
+          errorCode: 'invalid_credential_status_id',
+          message:
+            'invalid_credential_status_id: ' +
+            'Credential status id is not a base58 encoded sha256 hash of the credential',
+        };
+      }
+    }
+
+    return result;
+  }
+
   async credentialStatusGenerate(
     args: LtoCredentialStatusGenerateArgs,
     context?: ManagerAgentContext,
   ): Promise<CredentialStatusReference> {
     const { type, credential } = args;
     if (type !== 'LtoStatusRegistry2023') throw new Error('Unsupported credential status type');
-    if (!credential) throw new Error('No credential supplied');
 
     const id = this.credentialStatusId(credential);
 
