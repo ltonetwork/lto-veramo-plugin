@@ -13,26 +13,37 @@ import {
   CredentialStatusUpdateArgs,
   CredentialStatusReference,
   CredentialPayload,
+  IAgentContext,
+  IDIDManager,
+  IKey,
+  IIdentifier,
+  IssuerType,
 } from '@veramo/core';
 import canonicalize from 'canonicalize';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58 } from '@scure/base';
 import { LtoConnection, LtoOptions } from './lto-connection';
 import { Statement } from '@ltonetwork/lto';
+import { ofKey } from './convert';
+import { TAgent } from '@veramo/core/src/types/IAgent';
 
 interface LtoCredentialStatusGenerateArgs extends CredentialStatusGenerateArgs {
   type: 'LtoStatusRegistry2023';
-  credential: CredentialPayload | VerifiableCredential;
+  credential?: CredentialPayload | VerifiableCredential;
+  keyRef?: string;
 }
 
 interface LtoCredentialStatusUpdateArgs extends CredentialStatusUpdateArgs {
   vc: VerifiableCredential;
   options?: {
     status: 'issue' | 'revoke' | 'suspend' | 'reinstate' | 'dispute' | 'acknowledge';
+    keyRef?: string;
   };
 }
 
-enum LtoCredentialStatusStatementType {
+export type ManagerAgentContext = IAgentContext<Pick<IDIDManager, 'didManagerGet'>>;
+
+enum StatusStatementType {
   issue = 0x10,
   revoke = 0x11,
   suspend = 0x12,
@@ -75,6 +86,35 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     this.issueStatement = options.issueStatement ?? true;
   }
 
+  private async getIdentifier(
+    issuer: IssuerType,
+    agent: TAgent<Pick<IDIDManager, 'didManagerGet'>>,
+  ): Promise<IIdentifier> {
+    if (!agent || !agent.didManagerGet) {
+      throw new Error('invalid_setup: your agent does not seem to have IDIDManager plugin installed');
+    }
+
+    try {
+      return await agent.didManagerGet({ did: typeof issuer === 'string' ? issuer : issuer.id });
+    } catch (e) {
+      throw new Error(`invalid_argument: credential.issuer must be a DID managed by this agent. ${e}`);
+    }
+  }
+
+  private pickSigningKey(identifier: IIdentifier, keyRef?: string): IKey {
+    let key: IKey | undefined;
+
+    if (!keyRef) {
+      key = identifier.keys.find((k) => k.type === 'Secp256k1' || k.type === 'Ed25519' || k.type === 'Secp256r1');
+      if (!key) throw Error('key_not_found: No signing key for ' + identifier.did);
+    } else {
+      key = identifier.keys.find((k) => k.kid === keyRef);
+      if (!key) throw Error('key_not_found: No signing key for ' + identifier.did + ' with kid ' + keyRef);
+    }
+
+    return key as IKey;
+  }
+
   private credentialStatusId(credential: CredentialPayload | VerifiableCredential): Uint8Array {
     const { credentialStatus, proof, ...rest } = credential;
     return sha256(canonicalize(rest) as string);
@@ -84,12 +124,14 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     args: ICreateVerifiableCredentialArgs,
     context: IssuerAgentContext,
   ): Promise<VerifiableCredential> {
-    const { credential } = args;
     if (this.addCredentialStatus) {
-      credential.credentialStatus = await this.credentialStatusGenerate({ type: 'LtoStatusRegistry2023', ...args });
+      args.credential.credentialStatus = await this.credentialStatusGenerate(
+        { type: 'LtoStatusRegistry2023', ...args },
+        context,
+      );
     }
 
-    return this._createVerifiableCredential({ ...args, credential }, context);
+    return this._createVerifiableCredential(args, context);
   }
 
   async verifyCredential(args: IVerifyCredentialArgs, context: VerifierAgentContext): Promise<IVerifyResult> {
@@ -118,20 +160,32 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     return result;
   }
 
-  async credentialStatusGenerate(args: LtoCredentialStatusGenerateArgs): Promise<CredentialStatusReference> {
+  async credentialStatusGenerate(
+    args: LtoCredentialStatusGenerateArgs,
+    context?: ManagerAgentContext,
+  ): Promise<CredentialStatusReference> {
     const { type, credential } = args;
     if (type !== 'LtoStatusRegistry2023') throw new Error('Unsupported credential status type');
 
     const id = this.credentialStatusId(credential);
 
     if (this.issueStatement) {
-      await this.lto.broadcast(new Statement(LtoCredentialStatusStatementType.issue, undefined, id));
+      const identifier = await this.getIdentifier(credential.issuer, context.agent);
+      const key = this.pickSigningKey(identifier, args.keyRef);
+      await this.submitStatus(id, StatusStatementType.issue, key);
     }
 
     return { id: base58.encode(id), type: 'LtoStatusRegistry2023' };
   }
 
-  async credentialStatusUpdate(args: LtoCredentialStatusUpdateArgs): Promise<void> {
+  private async submitStatus(id: Uint8Array, status: StatusStatementType, key: IKey): Promise<void> {
+    const sender = this.lto.account(ofKey(key));
+
+    const tx = new Statement(status, undefined, id).signWith(sender);
+    await this.lto.broadcast(tx);
+  }
+
+  async credentialStatusUpdate(args: LtoCredentialStatusUpdateArgs, context?: ManagerAgentContext): Promise<void> {
     const { vc, options } = args;
     const { status } = options ?? {};
 
@@ -139,9 +193,12 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     if (vc.credentialStatus?.type !== 'LtoStatusRegistry2023') throw new Error('Unsupported credential status type');
 
     const id = base58.decode(vc.credentialStatus.id);
-    const statementType = LtoCredentialStatusStatementType[status];
+    const statementType = StatusStatementType[status];
 
-    await this.lto.broadcast(new Statement(statementType, undefined, id));
+    const identifier = await this.getIdentifier(vc.issuer, context?.agent);
+    const key = this.pickSigningKey(identifier, args.options.keyRef);
+
+    await this.submitStatus(id, StatusStatementType.issue, key);
   }
 
   async credentialStatusTypes() {

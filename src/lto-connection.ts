@@ -2,20 +2,18 @@ import { IAccountIn, ISigner } from '@ltonetwork/lto/interfaces';
 import LTO, { Account, Binary, PublicNode, Transaction } from '@ltonetwork/lto';
 
 interface LtoOptionsWithLTO {
-  defaultKms: string;
-  sponsor?: ISigner | IAccountIn;
   lto: LTO;
   networkId?: never;
   nodeAddress?: never;
   nodeApiKey?: never;
+  sponsor?: ISigner | IAccountIn;
 }
 interface LtoOptionsWithSettings {
-  defaultKms: string;
-  sponsor?: ISigner | IAccountIn;
   lto?: never;
   networkId?: string;
   nodeAddress?: string;
   nodeApiKey?: string;
+  sponsor?: ISigner | IAccountIn;
 }
 export type LtoOptions = LtoOptionsWithLTO | LtoOptionsWithSettings;
 

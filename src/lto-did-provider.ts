@@ -34,11 +34,10 @@ export class LtoDIDProvider extends AbstractIdentifierProvider {
   readonly lto: LtoConnection;
   readonly sponsor?: Account;
 
-  constructor(options: LtoOptions) {
+  constructor(options: LtoOptions & { defaultKms: string }) {
     super();
 
     this.defaultKms = options.defaultKms;
-
     this.lto = new LtoConnection(options);
   }
 
