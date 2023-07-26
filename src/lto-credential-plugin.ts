@@ -18,6 +18,7 @@ import {
   IKey,
   IIdentifier,
   IssuerType,
+  IKeyManager,
 } from '@veramo/core';
 import canonicalize from 'canonicalize';
 import { sha256 } from '@noble/hashes/sha256';
@@ -41,7 +42,9 @@ interface LtoCredentialStatusUpdateArgs extends CredentialStatusUpdateArgs {
   };
 }
 
-export type ManagerAgentContext = IAgentContext<Pick<IDIDManager, 'didManagerGet'>>;
+export type ManagerAgentContext = IAgentContext<
+  Pick<IDIDManager, 'didManagerGet'> & Pick<IKeyManager, 'keyManagerGet'>
+>;
 
 enum StatusStatementType {
   issue = 0x10,
@@ -90,7 +93,7 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     issuer: IssuerType,
     agent: TAgent<Pick<IDIDManager, 'didManagerGet'>>,
   ): Promise<IIdentifier> {
-    if (!agent || !agent.didManagerGet) {
+    if (!agent?.didManagerGet) {
       throw new Error('invalid_setup: your agent does not seem to have IDIDManager plugin installed');
     }
 
@@ -195,10 +198,22 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     const id = base58.decode(vc.credentialStatus.id);
     const statementType = StatusStatementType[status];
 
-    const identifier = await this.getIdentifier(vc.issuer, context?.agent);
-    const key = this.pickSigningKey(identifier, args.options.keyRef);
+    let key: IKey;
 
-    await this.submitStatus(id, StatusStatementType.issue, key);
+    if (statementType === StatusStatementType.dispute || statementType === StatusStatementType.acknowledge) {
+      if (!context?.agent.keyManagerGet) {
+        throw new Error('invalid_setup: your agent does not seem to have IKeyManager plugin installed');
+      }
+      if (!options?.keyRef) throw new Error('The keyRef option is required for dispute and acknowledge statements');
+
+      key = await context.agent.keyManagerGet({ kid: options.keyRef });
+      if (!key) throw Error(`key_not_found: No key with kid ${options.keyRef}`);
+    } else {
+      const identifier = await this.getIdentifier(vc.issuer, context?.agent);
+      key = this.pickSigningKey(identifier, options?.keyRef);
+    }
+
+    await this.submitStatus(id, statementType, key);
   }
 
   async credentialStatusTypes() {
