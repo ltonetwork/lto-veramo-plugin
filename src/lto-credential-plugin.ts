@@ -128,6 +128,11 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     context: IssuerAgentContext,
   ): Promise<VerifiableCredential> {
     if (this.addCredentialStatus) {
+      const credential = await this._createVerifiableCredential({ ...args, save: false }, context);
+
+      delete credential.proof;
+      args.credential = credential as CredentialPayload;
+
       args.credential.credentialStatus = await this.credentialStatusGenerate(
         { type: 'LtoStatusRegistry2023', ...args },
         context,
@@ -169,6 +174,7 @@ export class LtoCredentialPlugin implements IAgentPlugin {
   ): Promise<CredentialStatusReference> {
     const { type, credential } = args;
     if (type !== 'LtoStatusRegistry2023') throw new Error('Unsupported credential status type');
+    if (!credential) throw new Error('No credential argument provided');
 
     const id = this.credentialStatusId(credential);
 
