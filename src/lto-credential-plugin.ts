@@ -203,6 +203,7 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     ) {
       return {
         verified: false,
+        credentialStatus: status,
         error: {
           message:
             'issue_statement_elapsed: The on-chain statement has been published more than 5 minutes after the credential was issued',
@@ -214,6 +215,7 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     if (status.suspendedAt) {
       return {
         verified: false,
+        credentialStatus: status,
         error: {
           message: 'suspended: The credential was suspended by the issuer',
           errorCode: 'suspended',
@@ -224,6 +226,7 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     if (status.revokedAt) {
       return {
         verified: false,
+        credentialStatus: status,
         error: {
           message: 'revoked: The credential was revoked by the issuer',
           errorCode: 'revoked',
@@ -231,6 +234,7 @@ export class LtoCredentialPlugin implements IAgentPlugin {
       };
     }
 
+    result.credentialStatus = status;
     return result;
   }
 
