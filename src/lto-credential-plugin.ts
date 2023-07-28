@@ -37,7 +37,8 @@ interface LtoCredentialStatusGenerateArgs extends CredentialStatusGenerateArgs {
 interface LtoCredentialStatusUpdateArgs extends CredentialStatusUpdateArgs {
   vc: VerifiableCredential;
   options?: {
-    status: 'issue' | 'revoke' | 'suspend' | 'reinstate' | 'dispute' | 'acknowledge';
+    type: 'issue' | 'revoke' | 'suspend' | 'reinstate' | 'dispute' | 'acknowledge';
+    reason?: string;
     keyRef?: string;
   };
 }
@@ -257,22 +258,30 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     return { id: base58.encode(id), type: 'LtoStatusRegistry2023' };
   }
 
-  private async submitStatus(id: Uint8Array, status: StatusStatementType, key: IKey): Promise<void> {
+  private async submitStatus(
+    id: Uint8Array,
+    status: StatusStatementType,
+    key: IKey,
+    data: Record<string, any> = {},
+  ): Promise<void> {
     const sender = this.lto.account(ofKey(key));
 
-    const tx = new Statement(status, undefined, id).signWith(sender);
+    const tx = new Statement(status, undefined, id, data).signWith(sender);
     await this.lto.broadcast(tx);
   }
 
   async credentialStatusUpdate(args: LtoCredentialStatusUpdateArgs, context?: ManagerAgentContext): Promise<void> {
     const { vc, options } = args;
-    const { status } = options ?? {};
+    const { type, reason } = options ?? {};
 
-    if (!status) throw new Error('Missing status option');
-    if (vc.credentialStatus?.type !== 'LtoStatusRegistry2023') throw new Error('Unsupported credential status type');
+    if (!type) throw new Error('missing_argument: missing type option');
+    if (vc.credentialStatus?.type !== 'LtoStatusRegistry2023') {
+      throw new Error('unsupported: Unsupported credential status type');
+    }
 
     const id = base58.decode(vc.credentialStatus.id);
-    const statementType = StatusStatementType[status];
+    const statementType = StatusStatementType[type];
+    if (!statementType) throw new Error('invalid_argument: invalid statement type');
 
     let key: IKey;
 
@@ -280,7 +289,9 @@ export class LtoCredentialPlugin implements IAgentPlugin {
       if (!context?.agent.keyManagerGet) {
         throw new Error('invalid_setup: your agent does not seem to have IKeyManager plugin installed');
       }
-      if (!options?.keyRef) throw new Error('The keyRef option is required for dispute and acknowledge statements');
+      if (!options?.keyRef) {
+        throw new Error('missing_argument: the keyRef option is required for dispute and acknowledge statements');
+      }
 
       key = await context.agent.keyManagerGet({ kid: options.keyRef });
       if (!key) throw Error(`key_not_found: No key with kid ${options.keyRef}`);
@@ -289,7 +300,7 @@ export class LtoCredentialPlugin implements IAgentPlugin {
       key = this.pickSigningKey(identifier, options?.keyRef);
     }
 
-    await this.submitStatus(id, statementType, key);
+    await this.submitStatus(id, statementType, key, reason ? { reason } : {});
   }
 
   async credentialStatusTypes() {
