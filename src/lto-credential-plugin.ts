@@ -55,6 +55,14 @@ enum StatusStatementType {
   acknowledge = 0x15,
 }
 
+interface IssueOpts {
+  addCredentialStatus?: boolean;
+  issueStatement?: boolean;
+}
+interface VerifyOpts {
+  acceptUnknownStatus?: boolean;
+}
+
 export class LtoCredentialPlugin implements IAgentPlugin {
   readonly _createVerifiableCredential: ICredentialPlugin['createVerifiableCredential'];
   readonly _verifyCredential: ICredentialPlugin['verifyCredential'];
@@ -64,10 +72,11 @@ export class LtoCredentialPlugin implements IAgentPlugin {
   readonly lto: LtoConnection;
   readonly addCredentialStatus: boolean;
   readonly issueStatement: boolean;
+  readonly acceptUnknownStatus: boolean;
 
   constructor(
     plugin: { methods: ICredentialPlugin; schema?: IAgentPluginSchema },
-    options: LtoOptions & { addCredentialStatus?: boolean; issueStatement?: boolean },
+    options: LtoOptions & IssueOpts & VerifyOpts = {},
   ) {
     const { methods, schema } = plugin;
 
@@ -87,6 +96,7 @@ export class LtoCredentialPlugin implements IAgentPlugin {
     this.lto = new LtoConnection(options);
     this.addCredentialStatus = options.addCredentialStatus ?? false;
     this.issueStatement = options.issueStatement ?? true;
+    this.acceptUnknownStatus = options.acceptUnknownStatus ?? !this.issueStatement;
   }
 
   private async getIdentifier(
@@ -143,26 +153,82 @@ export class LtoCredentialPlugin implements IAgentPlugin {
   }
 
   async verifyCredential(args: IVerifyCredentialArgs, context: VerifierAgentContext): Promise<IVerifyResult> {
-    const result = await this._verifyCredential(args, context);
-
     const { credential } = args;
 
-    if (
-      result.verified &&
-      typeof credential !== 'string' &&
-      credential.credentialStatus?.type === 'LtoStatusRegistry2023'
-    ) {
-      const id = this.credentialStatusId(credential);
+    if (typeof credential === 'string' || credential.credentialStatus?.type !== 'LtoStatusRegistry2023') {
+      return this._verifyCredential(args, context);
+    }
 
-      if (credential.credentialStatus.id !== base58.encode(id)) {
-        result.verified = false;
-        result.error = {
-          errorCode: 'invalid_credential_status_id',
+    const result = await this._verifyCredential(
+      { ...args, policies: { ...args.policies, credentialStatus: false } },
+      context,
+    );
+
+    if (result.verified && credential.credentialStatus.id !== base58.encode(this.credentialStatusId(credential))) {
+      result.verified = false;
+      result.error = {
+        errorCode: 'invalid_credential_status_id',
+        message:
+          'invalid_credential_status_id: Credential status id is not a base58 encoded sha256 hash of the credential',
+      };
+    }
+
+    if (!result.verified || args.policies?.credentialStatus === false) return result;
+
+    if (typeof context.agent.checkCredentialStatus !== 'function') {
+      throw new Error(
+        `invalid_setup: The credential status can't be verified because there is no ICredentialStatusVerifier plugin installed.`,
+      );
+    }
+
+    const status = await context.agent.checkCredentialStatus({ credential });
+
+    if (
+      !status.issuedAt &&
+      !this.acceptUnknownStatus &&
+      Math.abs(new Date(credential.issuanceDate).getTime() - Date.now()) > 300_000
+    ) {
+      return {
+        verified: false,
+        error: {
+          message: 'unknown_status: There is no on-chain record of the credential being issued',
+          errorCode: 'unknown_status',
+        },
+      };
+    }
+
+    if (
+      status.issuedAt &&
+      Math.abs(new Date(credential.issuanceDate).getTime() - new Date(status.issuedAt).getTime()) > 300_000
+    ) {
+      return {
+        verified: false,
+        error: {
           message:
-            'invalid_credential_status_id: ' +
-            'Credential status id is not a base58 encoded sha256 hash of the credential',
-        };
-      }
+            'issue_statement_elapsed: The on-chain statement has been published more than 5 minutes after the credential was issued',
+          errorCode: 'issue_statement_elapsed',
+        },
+      };
+    }
+
+    if (status.suspendedAt) {
+      return {
+        verified: false,
+        error: {
+          message: 'suspended: The credential was suspended by the issuer',
+          errorCode: 'suspended',
+        },
+      };
+    }
+
+    if (status.revokedAt) {
+      return {
+        verified: false,
+        error: {
+          message: 'revoked: The credential was revoked by the issuer',
+          errorCode: 'revoked',
+        },
+      };
     }
 
     return result;

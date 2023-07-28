@@ -37,7 +37,7 @@ export class LtoCredentialStatusVerifier implements IAgentPlugin {
 
     if (credentialStatus?.type !== 'LtoStatusRegistry2023') throw new Error('Unsupported credential status type');
 
-    const response = await fetch(`${this.url}/${credentialStatus.id}?issuer=${issuer}`);
+    const response = await fetch(`${this.url}${credentialStatus.id}?issuer=${issuer}`);
     const status: Record<string, any> = await response.json();
 
     return {
